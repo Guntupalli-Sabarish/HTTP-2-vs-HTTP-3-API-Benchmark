@@ -1,0 +1,8 @@
+api/target/
+benchmark/results/raw/*
+!benchmark/results/raw/.gitkeep
+benchmark/results/processed/*
+!benchmark/results/processed/.gitkeep
+benchmark/results/charts/*
+!benchmark/results/charts/.gitkeep
+
