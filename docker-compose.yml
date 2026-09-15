@@ -11,6 +11,9 @@ services:
       - api
     ports:
       - "8443:8443/tcp"
+      - "8443:8443/udp"
+    cap_add:
+      - NET_ADMIN
     volumes:
       - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data

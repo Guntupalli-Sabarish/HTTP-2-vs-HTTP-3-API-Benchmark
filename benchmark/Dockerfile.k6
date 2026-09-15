@@ -1,0 +1,13 @@
+FROM golang:1.23-alpine
+
+RUN apk add --no-cache git gcc musl-dev
+
+# Install xk6
+RUN go install go.k6.io/xk6/cmd/xk6@v0.13.3
+
+# Build k6 with HTTP/3 support
+WORKDIR /build
+# The xk6-http3 plugin allows k6 to make HTTP/3 requests.
+RUN xk6 build --with github.com/bandorko/xk6-http3
+
+ENTRYPOINT ["./k6"]

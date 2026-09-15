@@ -1,4 +1,4 @@
-https://localhost:8443 {
+https://localhost:8443, https://caddy:8443 {
     tls internal
     reverse_proxy api:8080
 }

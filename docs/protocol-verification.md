@@ -47,4 +47,52 @@ This proves that the request reached Caddy over TLS and negotiated HTTP/2. The r
 
 ## HTTP/3 over QUIC
 
-Not configured yet. This section will be updated at Checkpoint 5 only after a client with verified HTTP/3 support is available.
+### Endpoint
+
+```text
+https://caddy:8443/api/health
+```
+
+### Configuration
+
+Caddy enables HTTP/3 by default on the same port it uses for HTTPS. To support HTTP/3, the UDP port `8443` must be explicitly exposed in Docker Compose alongside the TCP port. The `Caddyfile` was updated to explicitly serve `https://caddy:8443` to ensure the internal TLS certificate is valid when queried from within the Docker network.
+
+### Verification command
+
+Because the default `curl` build on WSL does not support HTTP/3, we use a Dockerized client (`ymuski/curl-http3`) attached directly to the project's Docker network to issue the request:
+
+```bash
+docker run --rm --network http-2-vs-http-3-api-benchmark_default ymuski/curl-http3 curl --insecure --http3 --verbose https://caddy:8443/api/health
+```
+
+### Required evidence
+
+The curl verbose output must confirm the usage of HTTP/3 via UDP:
+
+```text
+* using HTTP/3
+< HTTP/3 200
+```
+
+### Result
+
+Verified on 2026-09-15 using the `ymuski/curl-http3` Docker image:
+
+```text
+* Connected to caddy (172.19.0.3) port 8443
+* using HTTP/3
+* Using HTTP/3 Stream ID: 0
+> GET /api/health HTTP/3
+> Host: caddy:8443
+> User-Agent: curl/8.2.1-DEV
+> Accept: */*
+> 
+< HTTP/3 200 
+< content-type: application/json
+< date: Tue, 15 Sep 2026 16:35:17 GMT
+< via: 1.1 Caddy
+< 
+{"status":"UP"}
+```
+
+This proves that the client successfully reached Caddy over QUIC (UDP) and negotiated HTTP/3, returning the exact same application payload as HTTP/2.
