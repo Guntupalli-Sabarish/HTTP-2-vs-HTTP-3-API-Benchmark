@@ -1,2 +1,21 @@
-# Docker Compose services will be introduced when the reverse proxy is configured.
+services:
+  api:
+    build:
+      context: ./api
+    expose:
+      - "8080"
 
+  caddy:
+    image: caddy:2.10.2-alpine
+    depends_on:
+      - api
+    ports:
+      - "8443:8443/tcp"
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+  caddy_config:

@@ -1,2 +1,4 @@
-# Caddy reverse-proxy configuration will be introduced in checkpoint 3.
-
+https://localhost:8443 {
+    tls internal
+    reverse_proxy api:8080
+}
