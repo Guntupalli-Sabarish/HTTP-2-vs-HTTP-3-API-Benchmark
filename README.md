@@ -30,6 +30,14 @@ docker build -t custom-k6 -f benchmark/Dockerfile.k6 .
 docker compose up -d --build
 ```
 
+### 2.5) Run standalone verification (recommended before full runs)
+
+```bash
+bash ./benchmark/scripts/verify-checkpoint13.sh
+```
+
+This verifies protocol negotiation, all five network scenarios, and Checkpoint 13 script invariants (P99, repetitions, raw-v2 path).
+
 ### 3) Run the full suite
 
 The full suite runs:
@@ -58,6 +66,10 @@ Windows:
 ## Important note on HTTP/3 high-concurrency failures
 
 If degraded high-concurrency HTTP/3 runs fail, treat them as **benchmark-client/tooling limitations** (xk6-http3 instability) unless independently validated otherwise. They should not be treated as direct evidence of protocol-level HTTP/3 failure.
+
+Investigation/fallback workflow:
+1. `bash ./benchmark/scripts/investigate-http3-crash.sh`
+2. `bash ./benchmark/scripts/run-fallback-h2load.sh` for unstable scenario/concurrency pairs
 
 ---
 

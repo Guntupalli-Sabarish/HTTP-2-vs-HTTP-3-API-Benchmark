@@ -101,9 +101,13 @@ function parseFile(file) {
   const endpoint = endpointFromToken(endpointToken);
   const concurrency = Number(conc);
 
+  const exitCodeMatch = content.match(/BENCHMARK_RUN_EXIT_CODE=(\d+)/);
+  const exitCode = exitCodeMatch ? Number(exitCodeMatch[1]) : 0;
+
   let status = 'success';
   if (/^SKIPPED:/m.test(content)) status = 'skipped';
-  else if (/panic|sigsegv|segmentation fault/i.test(content)) status = 'tool_crash';
+  else if (/panic|sigsegv|segmentation fault|invalid memory address|nil pointer/i.test(content)) status = 'tool_crash';
+  else if (exitCode > 0) status = 'tool_error';
   else if (/status is 200[^\n]*0\.00%/i.test(content)) status = 'http_error';
 
   const reqKey = protocol === 'HTTP/3' ? 'http3_req_duration' : 'http_req_duration';
@@ -140,6 +144,7 @@ function parseFile(file) {
     p99: readMetricToken(trendLine, 'p\\(99\\)'),
     max: readMetricToken(trendLine, 'max'),
     avg: readMetricToken(trendLine, 'avg'),
+    exit_code: exitCode,
     source_file: file,
   };
 }
@@ -187,6 +192,7 @@ const header = [
   'P99',
   'Max',
   'Avg',
+  'ExitCode',
   'SourceFile',
 ];
 
@@ -215,6 +221,7 @@ for (const r of rows) {
     r.p99,
     r.max,
     r.avg,
+    r.exit_code,
     r.source_file,
   ].join(','));
 }

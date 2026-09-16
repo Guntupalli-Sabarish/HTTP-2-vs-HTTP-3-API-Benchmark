@@ -138,7 +138,7 @@ fs.writeFileSync(
   'utf8'
 );
 
-const crashRows = rows.filter((r) => r.Status === 'tool_crash' || r.Status === 'skipped');
+const crashRows = rows.filter((r) => r.Status === 'tool_crash' || r.Status === 'tool_error' || r.Status === 'skipped');
 const crashSummary = [...new Set(crashRows.map((r) => `${r.Scenario} | ${r.Protocol} | c=${r.Concurrency} | ${r.Status}`))]
   .sort();
 
@@ -158,11 +158,73 @@ writeChartCsv('scenario-rps-limit1000-c10-warm.csv', chartRpsRows, ['Scenario', 
 writeChartCsv('scenario-p99-limit1000-c10-warm.csv', chartP99Rows, ['Scenario', 'Protocol', 'AvgP99Ms']);
 writeChartCsv('cold-vs-warm-baseline-limit1000-c10.csv', chartColdWarmRows, ['Connection', 'Protocol', 'AvgP50Ms', 'AvgRPS']);
 
-const resultsDoc = `# Experiment Results\n\nThis report now uses the Checkpoint 13 dataset generated from \`benchmark/results/raw-v2\` and preserves existing \`benchmark/results/raw\` files.\n\n## What changed in Checkpoint 13\n- Five network scenarios are captured: 0/0, 50/0, 50/1, 100/3, 200/5.\n- Warm-connection tests run with repeated measured samples.\n- Cold-connection tests are recorded separately.\n- P99 is included in parsed output and aggregate summaries.\n- RPS is reported both from k6 and from derived requests/duration.\n\n## Output files\n- Per-run dataset: \`benchmark/results/full-results-v2.csv\`\n- Aggregated dataset: \`benchmark/results/full-results-v2-aggregated.csv\`\n- Chart-ready CSVs: \`benchmark/results/charts-v2/*.csv\`\n\n## HTTP/3 crash interpretation\nAny \`tool_crash\` or \`skipped\` rows represent **benchmark tooling limitations** (xk6-http3 instability under lossy/high-concurrency conditions), not direct protocol-level conclusions.\n\n## Crash/skip inventory\n${crashSummary.length ? crashSummary.map((x) => `- ${x}`).join('\n') : '- No tool_crash or skipped rows detected in parsed data.'}\n\n## Reproducibility checklist\n1. Build \`custom-k6\` from \`benchmark/Dockerfile.k6\`.\n2. Start stack via \`docker compose up -d --build\`.\n3. Run \`benchmark/scripts/run-full.sh\` (or \`.ps1\`).\n4. Parse: \`node benchmark/scripts/parse-v2.js > benchmark/results/full-results-v2.csv\`.\n5. Report: \`node benchmark/scripts/generate-report-v2.js\`.\n`;
+const resultsDoc = `# Experiment Results
+
+This report now uses the Checkpoint 13 dataset generated from \`benchmark/results/raw-v2\` and preserves existing \`benchmark/results/raw\` files.
+
+## What changed in Checkpoint 13
+- Five network scenarios are captured: 0/0, 50/0, 50/1, 100/3, 200/5.
+- Warm-connection tests run with repeated measured samples.
+- Cold-connection tests are recorded separately.
+- P99 is included in parsed output and aggregate summaries.
+- RPS is reported both from k6 and from derived requests/duration.
+
+## Output files
+- Per-run dataset: \`benchmark/results/full-results-v2.csv\`
+- Aggregated dataset: \`benchmark/results/full-results-v2-aggregated.csv\`
+- Chart-ready CSVs: \`benchmark/results/charts-v2/*.csv\`
+
+## HTTP/3 crash interpretation
+Any \`tool_crash\`, \`tool_error\`, or \`skipped\` rows represent **benchmark tooling limitations** (xk6-http3 instability under lossy/high-concurrency conditions), not direct protocol-level conclusions.
+
+## Crash/skip inventory
+${crashSummary.length ? crashSummary.map((x) => `- ${x}`).join('\n') : '- No tool_crash/tool_error/skipped rows detected in parsed data.'}
+
+## Reproducibility checklist
+1. Build \`custom-k6\` from \`benchmark/Dockerfile.k6\`.
+2. Start stack via \`docker compose up -d --build\`.
+3. Run \`benchmark/scripts/run-full.sh\` (or \`.ps1\`).
+4. Parse: \`node benchmark/scripts/parse-v2.js > benchmark/results/full-results-v2.csv\`.
+5. Report: \`node benchmark/scripts/generate-report-v2.js\`.
+6. If HTTP/3 instability appears, run \`benchmark/scripts/investigate-http3-crash.sh\` then \`benchmark/scripts/run-fallback-h2load.sh\` for affected scenario/concurrency pairs.
+`;
 
 fs.writeFileSync(DOC_RESULTS, resultsDoc, 'utf8');
 
-const methodDoc = `# Methodology (Checkpoint 13)\n\n## Scope\nThis benchmark compares HTTP/2 and HTTP/3 against the same backend API through the same Caddy reverse proxy path.\n\n## Network scenarios\n- scenA: 0ms delay, 0% loss\n- scenB: 50ms delay, 0% loss\n- scenC: 50ms delay, 1% loss\n- scenD: 100ms delay, 3% loss\n- scenE: 200ms delay, 5% loss\n\n## Matrix\n- Endpoints: /api/health, /api/products?limit=20, /api/products?limit=1000\n- Concurrency: 1, 10, 50, 100\n- Protocols: HTTP/2 and HTTP/3\n- Connection modes: warm and cold\n\n## Repetition strategy\n- Warm mode: 1 warmup run discarded + 5 measured runs per configuration\n- Cold mode: single run per configuration with one iteration per VU\n\n## Metrics\n- Latency: P50, P90, P95, P99, Max, Avg\n- Throughput: total requests and RPS (derived and reported)\n\n## Tooling limitation handling\nHTTP/3 instability from xk6-http3 at lossy high-concurrency settings is recorded as tooling failure (\`tool_crash\` or \`skipped\`), and should not be interpreted as protocol failure without independent confirmation.\n`;
+const methodDoc = `# Methodology (Checkpoint 13)
+
+## Scope
+This benchmark compares HTTP/2 and HTTP/3 against the same backend API through the same Caddy reverse proxy path.
+
+## Network scenarios
+- scenA: 0ms delay, 0% loss
+- scenB: 50ms delay, 0% loss
+- scenC: 50ms delay, 1% loss
+- scenD: 100ms delay, 3% loss
+- scenE: 200ms delay, 5% loss
+
+## Matrix
+- Endpoints: /api/health, /api/products?limit=20, /api/products?limit=1000
+- Concurrency: 1, 10, 50, 100
+- Protocols: HTTP/2 and HTTP/3
+- Connection modes: warm and cold
+
+## Repetition strategy
+- Warm mode: 1 warmup run discarded + 5 measured runs per configuration
+- Cold mode: single run per configuration with one iteration per VU
+
+## Metrics
+- Latency: P50, P90, P95, P99, Max, Avg
+- Throughput: total requests and RPS (derived and reported)
+
+## Tooling limitation handling
+HTTP/3 instability from xk6-http3 at lossy high-concurrency settings is recorded as tooling failure (\`tool_crash\`, \`tool_error\`, or \`skipped\`), and should not be interpreted as protocol failure without independent confirmation.
+
+## Crash investigation and fallback
+- Primary investigation script: \`benchmark/scripts/investigate-http3-crash.sh\`
+- Standalone fallback benchmark: \`benchmark/scripts/run-fallback-h2load.sh\`
+- Use fallback results only for unstable scenario/concurrency combinations, and keep primary data under \`benchmark/results/raw-v2/\`.
+`;
 
 fs.writeFileSync(DOC_METHOD, methodDoc, 'utf8');
 

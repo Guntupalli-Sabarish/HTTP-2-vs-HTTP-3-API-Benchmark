@@ -18,7 +18,7 @@ This report now uses the Checkpoint 13 dataset generated from `benchmark/results
 Any `tool_crash` or `skipped` rows represent **benchmark tooling limitations** (xk6-http3 instability under lossy/high-concurrency conditions), not direct protocol-level conclusions.
 
 ## Crash/skip inventory
-- No tool_crash or skipped rows detected in parsed data.
+- No tool_crash/tool_error/skipped rows detected in parsed data.
 
 ## Reproducibility checklist
 1. Build `custom-k6` from `benchmark/Dockerfile.k6`.

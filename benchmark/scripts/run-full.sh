@@ -1,6 +1,6 @@
 #!/bin/bash
 # run-full.sh — Full HTTP/2 vs HTTP/3 benchmark (Linux/macOS equivalent of run-full.ps1)
-set -e
+set -u -o pipefail
 
 # ---- Configuration --------------------------------------------------
 URLS=("/api/health" "/api/products?limit=20" "/api/products?limit=1000")
@@ -12,7 +12,8 @@ OUT_DIR="benchmark/results/raw-v2"
 CADDY="http-2-vs-http-3-api-benchmark-caddy-1"
 TREND_STATS="avg,min,med,max,p(90),p(95),p(99)"
 WARM_REPS=5
-H3_MAX_VUS_LOSSY=25
+H3_MAX_VUS_LOSSY="${H3_MAX_VUS_LOSSY:-25}"
+H3_LOSSY_MODE="${H3_LOSSY_MODE:-cap}" # cap | full
 
 # Scenarios: "name delay_ms loss_pct"
 declare -a SCENARIOS=(
@@ -22,6 +23,8 @@ declare -a SCENARIOS=(
     "scenD_100ms_3loss 100 3"
     "scenE_200ms_5loss 200 5"
 )
+
+RUN_FAILURES=0
 
 # ---- Helpers --------------------------------------------------------
 apply_network() {
@@ -65,6 +68,21 @@ run_k6() {
     fi
 }
 
+run_k6_safe() {
+    local script=$1 proto=$2 url=$3 vus=$4 conn_type=$5 out_file=$6
+    set +e
+    run_k6 "$script" "$proto" "$url" "$vus" "$conn_type" "$out_file"
+    local ec=$?
+    set -e
+
+    if [ "$ec" -ne 0 ]; then
+        RUN_FAILURES=$((RUN_FAILURES+1))
+        echo "BENCHMARK_RUN_EXIT_CODE=$ec" >> "$out_file"
+    fi
+
+    return "$ec"
+}
+
 # ---- Setup ----------------------------------------------------------
 echo "================================================================"
 echo " HTTP/2 vs HTTP/3 Full Benchmark — Checkpoint 13"
@@ -82,6 +100,7 @@ if ! docker image ls custom-k6 --format "{{.Repository}}" | grep -q "custom-k6";
 fi
 
 # ---- Main loop ------------------------------------------------------
+set -e
 for scenario_str in "${SCENARIOS[@]}"; do
     read -r SCEN_NAME DELAY_MS LOSS_PCT <<< "$scenario_str"
     IS_LOSSY=false
@@ -103,31 +122,37 @@ for scenario_str in "${SCENARIOS[@]}"; do
             TARGET="${BASE_URL}${ENDPOINT}"
 
             for C in "${CONCURRENCIES[@]}"; do
-                # Cap HTTP/3 VUs on lossy scenarios
-                if [ "$PROTO" = "h3" ] && [ "$IS_LOSSY" = "true" ] && [ "$C" -gt "$H3_MAX_VUS_LOSSY" ]; then
-                    echo "  [SKIP] ${PROTO_NAME} c=$C — SIGSEGV cap on lossy network"
+                # Cap HTTP/3 VUs on lossy scenarios unless explicitly overridden.
+                if [ "$PROTO" = "h3" ] && [ "$IS_LOSSY" = "true" ] && [ "$H3_LOSSY_MODE" = "cap" ] && [ "$C" -gt "$H3_MAX_VUS_LOSSY" ]; then
+                    echo "  [SKIP] ${PROTO_NAME} c=$C — lossy safe cap ${H3_MAX_VUS_LOSSY}"
                     SKIP_FILE="${OUT_DIR}/${SCEN_NAME}_${PROTO_NAME}${SAFE_EP}_c${C}_r0_warm.txt"
-                    echo "SKIPPED: xk6-http3 SIGSEGV cap — concurrency $C > $H3_MAX_VUS_LOSSY on lossy network" > "$SKIP_FILE"
+                    echo "SKIPPED: xk6-http3 lossy safe cap — concurrency $C > $H3_MAX_VUS_LOSSY" > "$SKIP_FILE"
                     continue
                 fi
 
                 # Warm: 1 warmup + WARM_REPS kept
                 echo "  [WARM] ${PROTO_NAME} | ${ENDPOINT} | c=${C}"
                 WARMUP_FILE="${OUT_DIR}/${SCEN_NAME}_${PROTO_NAME}${SAFE_EP}_c${C}_warmup_warm.txt"
-                run_k6 "/benchmark/scripts/k6-benchmark.js" "$PROTO" "$TARGET" "$C" "warm" "$WARMUP_FILE"
+                if ! run_k6_safe "/benchmark/scripts/k6-benchmark.js" "$PROTO" "$TARGET" "$C" "warm" "$WARMUP_FILE"; then
+                    echo "    Warmup failed (recorded): $WARMUP_FILE"
+                fi
                 sleep 2
 
                 for (( R=1; R<=WARM_REPS; R++ )); do
                     echo "    Run $R/$WARM_REPS..."
                     OUT_FILE="${OUT_DIR}/${SCEN_NAME}_${PROTO_NAME}${SAFE_EP}_c${C}_r${R}_warm.txt"
-                    run_k6 "/benchmark/scripts/k6-benchmark.js" "$PROTO" "$TARGET" "$C" "warm" "$OUT_FILE"
+                    if ! run_k6_safe "/benchmark/scripts/k6-benchmark.js" "$PROTO" "$TARGET" "$C" "warm" "$OUT_FILE"; then
+                        echo "    Run failed (recorded): $OUT_FILE"
+                    fi
                     sleep 2
                 done
 
                 # Cold: single run
                 echo "  [COLD] ${PROTO_NAME} | ${ENDPOINT} | c=${C}"
                 COLD_FILE="${OUT_DIR}/${SCEN_NAME}_${PROTO_NAME}${SAFE_EP}_c${C}_r1_cold.txt"
-                run_k6 "/benchmark/scripts/k6-cold.js" "$PROTO" "$TARGET" "$C" "cold" "$COLD_FILE"
+                if ! run_k6_safe "/benchmark/scripts/k6-cold.js" "$PROTO" "$TARGET" "$C" "cold" "$COLD_FILE"; then
+                    echo "    Cold run failed (recorded): $COLD_FILE"
+                fi
                 sleep 2
             done
         done
@@ -142,5 +167,9 @@ docker exec -u root "$CADDY" sh -c "tc qdisc del dev eth0 root 2>/dev/null || tr
 echo ""
 echo "================================================================"
 echo " Full benchmark complete! Results in: $OUT_DIR"
+echo " Recorded non-zero run exits: $RUN_FAILURES"
 echo " Run: node benchmark/scripts/parse-v2.js > benchmark/results/full-results-v2.csv"
+if [ "$RUN_FAILURES" -gt 0 ]; then
+  echo " Use benchmark/scripts/investigate-http3-crash.sh and/or run-fallback-h2load.sh for unstable HTTP/3 cases."
+fi
 echo "================================================================"
