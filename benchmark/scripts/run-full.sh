@@ -11,7 +11,7 @@ BASE_URL="https://caddy:8443"
 OUT_DIR="benchmark/results/raw-v2"
 CADDY="http-2-vs-http-3-api-benchmark-caddy-1"
 TREND_STATS="avg,min,med,max,p(90),p(95),p(99)"
-WARM_REPS=3
+WARM_REPS=5
 H3_MAX_VUS_LOSSY=25
 
 # Scenarios: "name delay_ms loss_pct"

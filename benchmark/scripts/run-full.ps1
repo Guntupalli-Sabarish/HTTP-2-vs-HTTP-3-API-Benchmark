@@ -6,7 +6,7 @@ $ErrorActionPreference = "Continue"
 # Covers:
 #   - 5 network scenarios (A–E)
 #   - 3 endpoints × 4 concurrencies × 2 protocols
-#   - 3 repeated runs per configuration (warm)
+#   - 5 repeated runs per configuration (warm)
 #   - 1 cold-connection run per configuration
 #   - P99 via --summary-trend-stats
 #   - HTTP/3 concurrency capped at 25 VUs for lossy scenarios
@@ -26,7 +26,7 @@ $BASE_URL      = "https://caddy:8443"
 $OUT_DIR       = "benchmark\results\raw-v2"
 $CADDY         = "http-2-vs-http-3-api-benchmark-caddy-1"
 $TREND_STATS   = "avg,min,med,max,p(90),p(95),p(99)"
-$WARM_REPS     = 3      # number of warm-connection repetitions to keep
+$WARM_REPS     = 5      # number of warm-connection repetitions to keep
 $H3_MAX_VUS_LOSSY = 25  # cap HTTP/3 VUs when packet loss > 0 (avoids SIGSEGV)
 
 # Network scenarios: @(name, delay_ms, loss_pct)
@@ -161,7 +161,7 @@ foreach ($scenario in $SCENARIOS) {
                        -Proto $PROTO -Url $TARGET -VUs $C -ConnType "warm" -OutFile $WARMUP_FILE
                 Start-Sleep -Seconds 2
 
-                # 3 kept repetitions
+                # 5 kept repetitions
                 for ($R = 1; $R -le $WARM_REPS; $R++) {
                     Write-Host "    Run $R/$WARM_REPS..."
                     $OUT_FILE = "$OUT_DIR\${SCEN_NAME}_${PROTO_NAME}${SAFE_EP}_c${C}_r${R}_warm.txt"
